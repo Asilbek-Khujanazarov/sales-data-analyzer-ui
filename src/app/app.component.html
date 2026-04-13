@@ -1,0 +1,235 @@
+﻿<div class="screen-scroll">
+<main class="layout">
+  <section class="hero glass">
+    <div>
+      <p class="eyebrow">Agentic Analytics Platform</p>
+      <h1>Sales Data Analyzer Dashboard</h1>
+      <p class="subtitle">
+        Dataset yuklang, avtomatik KPI va diagrammalarni oling, keyin agentdan biznes insight so'rang.
+      </p>
+    </div>
+    <div class="hero-stats" *ngIf="hasDataset">
+      <article>
+        <span>Total Rows</span>
+        <strong>{{ totalRows }}</strong>
+      </article>
+      <article>
+        <span>Columns</span>
+        <strong>{{ columns.length }}</strong>
+      </article>
+      <article>
+        <span>Session</span>
+        <strong>{{ sessionId ? 'Active' : 'Ready' }}</strong>
+      </article>
+    </div>
+  </section>
+
+  <section class="config card">
+    <div class="field-grid">
+      <label class="field">
+        <span>OpenAI API Key</span>
+        <input
+          type="password"
+          [(ngModel)]="apiKey"
+          (ngModelChange)="onApiKeyChange()"
+          placeholder="sk-proj-..."
+          autocomplete="off" />
+        <!-- <small class="field-help">Kalit faqat sizning brauzeringizda saqlanadi (localStorage).</small> -->
+      </label>
+
+      <label class="field">
+        <span>Sales File</span>
+        <input type="file" accept=".csv,.xlsx" (change)="onFileSelected($event)" />
+      </label>
+    </div>
+
+    <div class="actions">
+      <button class="primary" (click)="upload()" [disabled]="isUploading">
+        {{ isUploading ? 'Yuklanmoqda...' : 'Upload va Dashboardni qurish' }}
+      </button>
+      <p class="info" *ngIf="infoMessage">{{ infoMessage }}</p>
+      <p class="error" *ngIf="errorMessage">{{ errorMessage }}</p>
+    </div>
+  </section>
+
+  <section class="kpi card" *ngIf="metrics.length > 0">
+    <div class="kpi-head">
+      <h2>Business Snapshot</h2>
+      <span class="loading" *ngIf="isLoadingMetrics">Yuklanmoqda...</span>
+    </div>
+
+    <div class="kpi-grid">
+      <article class="kpi-item" *ngFor="let card of metrics">
+        <span class="kpi-label">{{ card.label }}</span>
+        <strong class="kpi-value">{{ card.value }}</strong>
+        <small *ngIf="card.hint">{{ card.hint }}</small>
+      </article>
+    </div>
+  </section>
+
+  <section class="viz-grid" *ngIf="hasDataset">
+    <article class="card flow-card">
+      <div class="card-head">
+        <h3>Agent Workflow</h3>
+      </div>
+
+      <svg class="workflow" viewBox="0 0 920 160" role="img" aria-label="Agent workflow">
+        <defs>
+          <linearGradient id="lineGrad" x1="0" x2="1">
+            <stop offset="0%" stop-color="#0ea5e9"></stop>
+            <stop offset="100%" stop-color="#14b8a6"></stop>
+          </linearGradient>
+        </defs>
+        <line x1="80" y1="80" x2="840" y2="80" stroke="url(#lineGrad)" stroke-width="6" stroke-linecap="round"></line>
+        <g *ngFor="let step of workflowSteps; let i = index">
+          <circle [attr.cx]="100 + i * 240" cy="80" r="30" fill="#0f172a"></circle>
+          <circle [attr.cx]="100 + i * 240" cy="80" r="26" fill="#f8fafc"></circle>
+          <text [attr.x]="100 + i * 240" y="86" text-anchor="middle" class="node-text">{{ i + 1 }}</text>
+          <text [attr.x]="100 + i * 240" y="140" text-anchor="middle" class="node-caption">{{ step }}</text>
+        </g>
+      </svg>
+    </article>
+
+    <article class="card donut-card" [class.focused]="selectedInsightChart === 'region-sales'">
+      <div class="card-head">
+        <h3>Region Distribution</h3>
+        <span class="loading" *ngIf="isLoadingCharts">Yuklanmoqda...</span>
+      </div>
+
+      <div class="donut-wrap" *ngIf="regionChart?.points?.length; else emptyRegion">
+        <div class="donut" [style.background]="donutStyle()">
+          <div class="donut-hole"></div>
+        </div>
+
+        <div class="legend">
+          <article *ngFor="let item of donutLegend()">
+            <span class="dot" [style.background]="item.color"></span>
+            <span class="name">{{ item.label }}</span>
+            <span class="percent">{{ item.percent }}%</span>
+          </article>
+        </div>
+      </div>
+
+      <ng-template #emptyRegion>
+        <p class="hint">Region diagrammasi uchun ma'lumot topilmadi.</p>
+      </ng-template>
+    </article>
+
+    <article class="card bars-card" [class.focused]="selectedInsightChart === 'product-sales'">
+      <div class="card-head">
+        <h3>Top Products</h3>
+      </div>
+
+      <div class="bar-list" *ngIf="productChart?.points?.length; else emptyProduct">
+        <div class="bar-row" *ngFor="let point of productChart?.points; let i = index">
+          <span class="bar-label">{{ point.label }}</span>
+          <div class="bar-track">
+            <div class="bar-fill" [style.width]="barWidth(point.value, productChart)" [style.background]="color(i)"></div>
+          </div>
+          <strong>{{ point.value | number:'1.0-2' }}</strong>
+        </div>
+      </div>
+
+      <ng-template #emptyProduct>
+        <p class="hint">Product diagrammasi uchun ma'lumot topilmadi.</p>
+      </ng-template>
+    </article>
+
+    <article class="card trend-card" [class.focused]="selectedInsightChart === 'monthly-trend'">
+      <div class="card-head">
+        <h3>Monthly Trend</h3>
+      </div>
+
+      <div class="trend-wrap" *ngIf="trendChart?.points?.length; else emptyTrend">
+        <svg viewBox="0 0 680 220" preserveAspectRatio="none">
+          <polyline [attr.points]="trendPolyline()" fill="none" stroke="#0891b2" stroke-width="4" stroke-linecap="round"></polyline>
+        </svg>
+        <div class="trend-labels">
+          <span *ngFor="let label of trendLabels()">{{ label }}</span>
+        </div>
+      </div>
+
+      <ng-template #emptyTrend>
+        <p class="hint">Trend diagrammasi uchun sana ustuni kerak.</p>
+      </ng-template>
+    </article>
+  </section>
+
+  <section class="insight card" *ngIf="hasDataset">
+    <div class="card-head">
+      <h2>AI Insight Panel</h2>
+      <div class="segment">
+        <button [class.active]="selectedInsightChart === 'region-sales'" (click)="selectedInsightChart = 'region-sales'">Region</button>
+        <button [class.active]="selectedInsightChart === 'product-sales'" (click)="selectedInsightChart = 'product-sales'">Product</button>
+        <button [class.active]="selectedInsightChart === 'monthly-trend'" (click)="selectedInsightChart = 'monthly-trend'">Trend</button>
+      </div>
+    </div>
+
+    <div class="ai-status" *ngIf="aiSource !== 'unknown'">
+      <span
+        class="chip"
+        [class.ok]="aiSource === 'openai'"
+        [class.warn]="aiSource === 'fallback'"
+        [class.err]="aiSource === 'error'">
+        {{
+          aiSource === 'openai'
+            ? 'AI: OpenAI live'
+            : aiSource === 'fallback'
+              ? 'AI: fallback mode'
+              : 'AI: error'
+        }}
+      </span>
+      <small *ngIf="aiDebugMessage">{{ aiDebugMessage }}</small>
+    </div>
+
+    <div class="quick-questions">
+      <button *ngFor="let item of quickQuestions" (click)="useQuickQuestion(item)">{{ item }}</button>
+    </div>
+
+    <div class="messages" *ngIf="chatHistory.length > 0">
+      <article class="message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'" *ngFor="let msg of chatHistory">
+        <span>{{ msg.role }}</span>
+        <p>{{ msg.content }}</p>
+      </article>
+    </div>
+
+    <div class="composer">
+      <input
+        type="text"
+        [(ngModel)]="question"
+        placeholder="Masalan: Region bo'yicha eng kuchli segment qaysi?"
+        (keyup.enter)="askQuestion()"
+      />
+      <button class="primary" (click)="askQuestion()" [disabled]="isAsking || !question.trim()">
+        {{ isAsking ? 'Yuborilmoqda...' : 'Agentdan so‘rash' }}
+      </button>
+    </div>
+  </section>
+
+  <section class="table card" *ngIf="hasDataset">
+    <div class="card-head">
+      <h2>Dataset Preview</h2>
+      <div class="pager">
+        <button (click)="previousPage()" [disabled]="page <= 1 || isLoadingPreview">Oldingi</button>
+        <span>{{ page }} / {{ totalPages }}</span>
+        <button (click)="nextPage()" [disabled]="page >= totalPages || isLoadingPreview">Keyingi</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th *ngFor="let column of columns">{{ column }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let row of rows">
+            <td *ngFor="let column of columns">{{ row[column] }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+</div>
